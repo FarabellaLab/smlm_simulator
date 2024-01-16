@@ -8,8 +8,6 @@ from CIMA.segments.SegmentGaussian import TransformBlurrer
 from CIMA.maps import MapFeatures
 from CIMA.maps import DensityProprieties
 from CIMA.segments.SegmentInfoXYZ import SegmentXYZ
-import seaborn as sns
-import pyvista as pv
 
 class TimeLabeledPrintOutNewline:
     

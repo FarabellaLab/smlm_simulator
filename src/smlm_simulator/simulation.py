@@ -13,6 +13,11 @@ from smlm_simulator.various import *
 # from numba import jit
 
 def getChr21DLs():
+    '''
+    Returns:
+    * a list of Nx3 numpy array representing diffraction limited coordinates of the segments
+    * a list of floats representing lengths of the segments in terms of basepairs
+    '''
     if(os.path.isfile('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv')):
         df = pd.read_csv('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
     if(os.path.isfile('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv')):
@@ -98,12 +103,15 @@ def simulate(dl_list, lengths,
     verbose=0):
     '''
     Arguments:
-        dl_list: list of np arrays of shape (n,3)
-        lengths: lengths in bp of the dls
-    '''
+    * dl_list: list of np arrays of shape (n,3)
+    * lengths: lengths in bp of the dls
+    * ...parameters
+    
 
-    np.random.seed(combination_parameters['random_seed'])
-    random.seed(combination_parameters['random_seed'])
+    Returns:
+    * list of pandas dataframes representing simulated experiments
+
+    '''
 
     probes_parameters = dict({
         'probes_per_mb': 200,
@@ -137,6 +145,9 @@ def simulate(dl_list, lengths,
         'random_noise_per_blinks': 0.1,
         'detection_rate': 0.7
     }, **localization_parameters)
+
+    np.random.seed(combination_parameters['random_seed'])
+    random.seed(combination_parameters['random_seed'])
 
     copies_probes_dfs = {}
 
