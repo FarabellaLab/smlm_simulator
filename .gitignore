@@ -1,0 +1,9 @@
+**.pyc
+
+*.pyc
+
+build/
+
+dist/
+
+CIMA.egg-info/
