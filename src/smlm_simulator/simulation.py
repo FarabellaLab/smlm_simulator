@@ -85,7 +85,9 @@ def getRandomIntsAtPercentileRegions(inds, values, num):
     return selected_inds
 
 def saveSimulatedPointClouds(sims_dfs, destination_folder = '/home/ipiacere@iit.local/Desktop/data/synth_data/test', parameters_dict={}, remove_old=True):
-    
+    '''
+    Save the provided dataframes in the destination folder. Moreover write the simulation parameters in a file in the same folder.
+    '''
     import os
     import glob
 
@@ -293,7 +295,7 @@ def getPositionsGivenNumAndNNDist(num, expected_nn_dist):
 def getLocalizationsFromCoords(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     precisionMeanLog, precisionSdLog, per_probe_precision=True):
     '''
-    Given probes positions, returns localizations
+    Given probes positions, returns localizations' positions
     '''
 
     numDimensions = moleculeCoords.shape[1]
@@ -332,7 +334,12 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
                   boundMoleculesAttract=False, min_dist=500,
                   verbose=0):
     '''
-    Port of the simulateSTORM function from R to python with some modifications
+    Port of the simulateSTORM function from R to python with some modifications.
+    The function performs the folllowing steps:
+    - Adding unbound probes
+    - Computing probes' localizations
+    - Removing detections outside fov
+    - Adding false detections
     '''
 
     numDimensions = moleculeCoords.shape[1]
@@ -342,7 +349,7 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     assert(fieldLimit.shape[0] == 2)
     assert(fieldLimit.shape[1] == numDimensions)
 
-    if(verbose>0): print('adding unbound molecules')
+    if(verbose>0): print('Adding unbound molecules')
     if(unboundMoleculesRate is None):
         sampledUnboundMoleculesRate=0
     else:
@@ -362,15 +369,16 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
         else:
             all_coords = unboundMoleculesCoords
             which_fixed_coords = np.full(len(all_coords), False)
-        if(verbose>0): print('computing unbound particles\' physics')
+        if(verbose>0): print('Computing unbound particles\' physics')
         allMoleculesCoordsGravitated = applyGravitySteps(all_coords, which_fixed_coords=which_fixed_coords,
                                                          iters_num=gravity_steps, shift_amount=gravity_amount,
                                                          radius=gravity_radius, min_dist=min_dist,
                                                          verbose=verbose>1)
         unboundMoleculesCoords = allMoleculesCoordsGravitated[np.invert(which_fixed_coords)]
-    
     allMoleculeCoords = np.concatenate((moleculeCoords, unboundMoleculesCoords), axis=0)
-    if(verbose>0): print('computing particles\' localizations')
+
+
+    if(verbose>0): print('Computing particles\' localizations')
     detectionCoords = getLocalizationsFromCoords(allMoleculeCoords, averageLabelsPerMol,
             blinkGeomProb, precisionMeanLog, precisionSdLog, per_probe_precision=True)
     if(len(detectionCoords.loc[detectionCoords['moleculeIndex']<len(moleculeCoords)])>0):
@@ -379,15 +387,13 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
         detectionCoords.loc[detectionCoords['moleculeIndex']>=len(moleculeCoords),'type'] = 1
         detectionCoords.loc[detectionCoords['moleculeIndex']>=len(moleculeCoords),'moleculeIndex'] = -1
 
-    if(verbose>0): print('removing undetected blinks')
 
-    if(verbose>0): print('removing detections outside fov')
+    if(verbose>0): print('Removing detections outside fov')
     is_detection_inside = ((detectionCoords[['x','y','z']].values > fieldLimit[0])*(detectionCoords[['x','y','z']].values < fieldLimit[1])).prod(axis=1).astype('bool')
     detectionCoords = detectionCoords.loc[is_detection_inside,:]
         
 
-    
-    if(verbose>0): print('adding false detections')
+    if(verbose>0): print('Adding false detections')
     if(falseDetectionRate is None):
         pass
     else:
@@ -398,7 +404,6 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
             columns = ['x','y','z'])
         accepted_false_detections_df['moleculeIndex'] = -1
         accepted_false_detections_df['type'] = 2
-
         detectionCoords = pd.concat((detectionCoords, accepted_false_detections_df), axis=0)
     
 
@@ -427,17 +432,18 @@ def getStormSimulatedPoints(inDf, size=33000, noiseLevel=0.1, unboundMoleculesRa
     
     falseDetectionRate = noiseLevel
     
-    
     wanted_var = wanted_sd**2
     var = np.log((wanted_var/(wanted_mean**2)) + 1)
     mu = np.log(wanted_mean) - var/2
     sd = np.sqrt(var)
     precisionMeanLog = mu
     precisionSdLog = sd
+
     if(len(moleculeCoords)>0):
-        center = getBoxCenter(moleculeCoords) # np.median(moleculeCoords, axis=0)
+        center = getBoxCenter(moleculeCoords)
     else:
         center = np.array([10000,10000,10000])
+    
     if isinstance(size, list): size = np.array(size)
     top = center + size/2
     bottom = center - size/2
@@ -718,13 +724,17 @@ def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
 
 def applyGravityStep(coords, which_fixed_coords, shift_amount=1/2, radius=100, min_dist=500):
     '''
-    *Arguments*
-        coords: the initial positions of the molecules
-        which_fixed_coords: boolean index indicating which of coords should not move but just attract
-        shift_amount: multiplier for the amount of movement
-        radius: radius around each molecule for which the molecules inside of it can affect the central one
-        min_dist: radius around each molecule for which the molecules inside of it cannot affect the central one. This represents the thickness of the molecule.
+    Get probes' positions after one step of attraction to other probes has been applied
 
+    Arguments:
+    * coords: the initial positions of the probes
+    * which_fixed_coords: boolean index indicating which of coords should not move but just attract
+    * shift_amount: multiplier for the amount of movement
+    * radius: radius around each molecule for which the probes inside of it can affect the central one
+    * min_dist: radius around each probes for which the probes inside of it cannot affect the central one. This represents the thickness of the molecule.
+
+    Return:
+    * np.array of same shape as coords, which represents the shifted coords
     '''
     # Find the molecules inside the radius and their distances from the central one
     from sklearn.neighbors import NearestNeighbors
@@ -753,6 +763,22 @@ def applyGravityStep(coords, which_fixed_coords, shift_amount=1/2, radius=100, m
     return shifted_coords
 
 def applyGravitySteps(coords, which_fixed_coords=None, iters_num=10, shift_amount=1/2, radius=100, verbose=False, return_iterations=False, min_dist=500):
+    '''
+    Get probes' positions after the attraction to other probes has been applied
+
+    Arguments:
+    * coords: the initial positions of the probes
+    * which_fixed_coords: boolean index indicating which of coords should not move but just attract
+    * iters_num: int, how many iterations need to be perfomed
+    * shift_amount: multiplier for the amount of movement
+    * radius: radius around each molecule for which the probes inside of it can affect the central one
+    * min_dist: radius around each probes for which the probes inside of it cannot affect the central one. This represents the thickness of the molecule.
+    * return iterations: bool, whether to return all the intermidiate positions or just the last one
+
+    Return:
+    * np.array of same shape as coords, which represents the shifted coords
+    '''
+
     from tqdm import tqdm
     if(which_fixed_coords is None): which_fixed_coords = np.full(len(coords), False)
     shifted_coords = np.zeros((iters_num+1, coords.shape[0], coords.shape[-1]))
