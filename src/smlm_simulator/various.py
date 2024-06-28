@@ -133,3 +133,9 @@ def getGyration(points):
 
 def getBoxCenter(points):
     return (points.max(axis=0)+points.min(axis=0))/2
+
+
+def exportPyVistaPlot(plotter, destination='/home/ipiacere@iit.local/Desktop/export.html', show_grid=True, show_axes=True):
+    if(show_grid): plotter.show_grid()
+    if(show_axes): plotter.add_axes()
+    plotter.export_html(destination)

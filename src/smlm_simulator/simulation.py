@@ -337,7 +337,7 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     Port of the simulateSTORM function from R to python with some modifications.
     The function performs the folllowing steps:
     - Adding unbound probes
-    - Computing probes' localizations
+    - Computing localizations' coordinates
     - Removing detections outside fov
     - Adding false detections
     '''
