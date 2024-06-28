@@ -19,7 +19,7 @@ def getChr21DLs():
 
 
     Returns:
-    * a list of Nx3 numpy array representing diffraction limited coordinates of the segments
+    * a list of numpy array of shape (n,3) representing diffraction limited coordinates of the segments
     * a list of floats representing lengths of the segments in terms of basepairs
     '''
     if(os.path.isfile('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv')):
@@ -47,7 +47,6 @@ def getChr21DLs():
     diffs_nm_all = []
     good_copies_with_small_dists = []
     for i in good_copies:
-        # print(df_cleaned[df_cleaned['Chromosome copy number'] == 171])
         diffs_bp = df_cleaned[df_cleaned['Chromosome copy number'] == i]['genetic_start'].diff()[1:].values
         diffs_nm = np.linalg.norm(df_cleaned[df_cleaned['Chromosome copy number'] == i][['X(nm)','Y(nm)','Z(nm)']].diff()[1:], axis=1)
         diffs_bp_all.append(diffs_bp)
@@ -68,6 +67,9 @@ def getChr21DLs():
     return dls, lengths
 
 def getRandomIntsAtPercentileRegions(inds, values, num):
+    '''
+    Given 'indices' and corresponding 'values', divide the distribution of 'values' in 'num' quantiles and select randomly one index from each of them.
+    '''
     df = pd.DataFrame()
     df['inds'] = inds
     df['values'] = values
@@ -108,12 +110,15 @@ def simulate(dl_list, lengths,
     localization_parameters={},
     verbose=0):
     '''
+    Generate a defined number of simulated SMLM experiments and return them as pandas dataframes.
+
+
     Arguments:
     * dl_list: list, list of np arrays of shape (n,3)
     * lengths: list, lengths in bp of the dls
     * ...parameters
     * probes_per_mb: int, how many probes to position in 1megabase of chromatin
-    * segment_width_nm: float, how thick should chromatin be
+    * segment_width_nm: unused, is is actually variable along the segment and is automatically computed with another function (getWidths)
     * segment_length_nm: int, length in basepairs (error in the variable name) should be the segment you generate
     * segments_per_sim: int, how many segments to insert in a single experiment
     * segs_per_comb_is_random: bool, should the number of segments be chosen randomly or should it be exaclty 'segments_per_sim'
@@ -145,7 +150,17 @@ def simulate(dl_list, lengths,
     Returns:
     * list of pandas dataframes representing simulated experiments
         each df with have columns
-        - 
+            x,y,z: coordinates of the point
+            type:
+                0: localization coming from a bound probe,
+                1: localization coming from an unbound probe (noise)
+                2: false localization (noise)
+            cluster-ID: index of the chromatin segment from which the localization was generated. -1 if the localization if false or it was generated from an unbound probe (noise)
+            moleculeIndex:
+                0...: index of the (bound) probe from which the localization was generated
+                -1: false localization or localization coming from an unbound probe (noise)
+            precisionx, precisiony, precisionz: mean localization precision for all localizations in the experiment
+            precisionx_actual, precisiony_actual, precisionz_actual: localization precision of the probe from which the localization was generated. All the localizations from the same probe have the same localization precision.
 
     '''
 
@@ -191,8 +206,6 @@ def simulate(dl_list, lengths,
     for i,dl in enumerate(tqdm(dl_list, disable=verbose<1)):
         length_bp = lengths[i]
         probes_num = int((length_bp/1000000)*probes_parameters['probes_per_mb'])
-
-        # np.random.seed(0)
 
         probes_df = getInterpolatedCoords(dl,
                                         probes_num,
@@ -279,6 +292,10 @@ def getPositionsGivenNumAndNNDist(num, expected_nn_dist):
 
 def getLocalizationsFromCoords(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     precisionMeanLog, precisionSdLog, per_probe_precision=True):
+    '''
+    Given probes positions, returns localizations
+    '''
+
     numDimensions = moleculeCoords.shape[1]
 
     numMolecules = moleculeCoords.shape[0]
@@ -325,36 +342,17 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     assert(fieldLimit.shape[0] == 2)
     assert(fieldLimit.shape[1] == numDimensions)
 
-    # if(verbose>0): print('adding basic localizations')
-    # detectionCoords = getLocalizationsFromCoords(moleculeCoords, averageLabelsPerMol,
-    #     blinkGeomProb, precisionMeanLog, precisionSdLog, per_probe_precision=True)
-    # detectionCoords['type'] = 0
-
     if(verbose>0): print('adding unbound molecules')
     if(unboundMoleculesRate is None):
         sampledUnboundMoleculesRate=0
     else:
-        '''wanted_mean = unboundMoleculesRate
-        wanted_sd = 244
-        wanted_var = wanted_sd**2
-        var = np.log((wanted_var/(wanted_mean**2)) + 1)
-        mu = np.log(wanted_mean) - var/2
-        sd = np.sqrt(var)
-        sampledUnboundMoleculesRate = np.random.lognormal(mu, sd) # np.random.normal(unboundMoleculesRate, 244) 
-        unboundMoleculesNum = int(sampledUnboundMoleculesRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9) # int(unboundMoleculesRate*len(moleculeCoords))'''
         if(isUnboundRateRandom):
             sampledUnboundMoleculesRate = max(np.random.normal(unboundMoleculesRate, 52),0)
         else:
             sampledUnboundMoleculesRate = unboundMoleculesRate
         unboundMoleculesNum = int(sampledUnboundMoleculesRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9)
-        # unboundMoleculesNum = int(unboundMoleculesRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9)
     unboundMoleculesCoords = np.empty(shape=(0,3))
     if(unboundMoleculesNum>0):
-        radius = (fieldLimit[1] - fieldLimit[0])*(1/2)*(1/2) # i want the distribution to reach a distance of half the radius outside the box
-        center = fieldLimit.sum(axis=0)/2
-        # unboundMoleculesCoords = sampleSteepNormal(m=center, radius=radius, smoothness=4, shape=(unboundMoleculesNum,3))
-        # unboundMoleculesCoords = np.random.uniform(fieldLimit[0], fieldLimit[1], (unboundMoleculesNum,numDimensions))
-        # unboundMoleculesCoords = np.random.normal(loc=center, scale=radius, size=(unboundMoleculesNum,numDimensions))
         unboundMoleculesCoords = getRandomPointsInCube(unboundMoleculesNum, fieldLimit, scales=noisescales, amplitudes=noiseamplitudes, smoothness=noisesmoothness)
 
         if(boundMoleculesAttract):
@@ -380,9 +378,6 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     if(len(detectionCoords.loc[detectionCoords['moleculeIndex']>=len(moleculeCoords)])>0):
         detectionCoords.loc[detectionCoords['moleculeIndex']>=len(moleculeCoords),'type'] = 1
         detectionCoords.loc[detectionCoords['moleculeIndex']>=len(moleculeCoords),'moleculeIndex'] = -1
-        
-
-    num_total_blinks = len(detectionCoords)
 
     if(verbose>0): print('removing undetected blinks')
 
@@ -394,16 +389,8 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     
     if(verbose>0): print('adding false detections')
     if(falseDetectionRate is None):
-        sampledFalseDetectionRate=0
+        pass
     else:
-        '''wanted_mean = falseDetectionRate
-        wanted_sd = 73
-        wanted_var = wanted_sd**2
-        var = np.log((wanted_var/(wanted_mean**2)) + 1)
-        mu = np.log(wanted_mean) - var/2
-        sd = np.sqrt(var)
-        sampledFalseDetectionRate = np.random.lognormal(mu, sd) # np.random.normal(falseDetectionRate, 73) 
-        numFalseDetections = int(sampledFalseDetectionRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9) # int(falseDetectionRate*len(detectionCoords))'''
         numFalseDetections = int(falseDetectionRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9)
     if(numFalseDetections > 0):
         accepted_false_detections = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
@@ -472,21 +459,34 @@ def getStormSimulatedPoints(inDf, size=33000, noiseLevel=0.1, unboundMoleculesRa
 
     detectionList_df[['precisionx','precisiony','precisionz']] = wanted_mean
 
-    return(detectionList_df)
+    return detectionList_df
 
-def getWidths(num, max_width=250, min_width=12, sampling_dist=100):
+def getWidths(num, min_width=12, sampling_dist=100):
+    '''
+    Given the number of sampling points along a chromatin segment, returns randomly generate chromatin widths at those points.
+    This is done by fixing to random values a subset (sefined by 'sampling_dist') of the sampling points,
+    and interpolating linearly the others.
+
+    Arguments:
+        * num: number of sampling points
+        * min_width: width to which the sampling points after the last fixed point are interpolated
+        * sampling_dist: distance between successive fixed points
+    
+    Returns:
+        * np.array of shape (num,) where each element represents the generated width of the corresponding sampling point on the chromatin segment
+    '''
     widths = np.zeros(num)
     where_fixed_inds = range(0,num,sampling_dist)
     where_fixed_arr = np.zeros(num, dtype='bool')
     where_fixed_arr[where_fixed_inds] = True
     widths[where_fixed_arr] = np.random.normal(250, 80, size=where_fixed_arr.sum())
-    # head and body
+    # first and central sampling points along the segment
     for i in range(len(where_fixed_inds)-1):
         weights = np.linspace(1,0,sampling_dist+1)[1:-1]
         indstart = where_fixed_inds[i]
         indend = where_fixed_inds[i+1]
         widths[indstart+1:indend] = widths[indstart]*weights + widths[indend]*(1-weights)
-    # tail
+    # sampling points after the last fixed point
     if(num>where_fixed_inds[-1]+1):
         weights = np.linspace(1,0,num - where_fixed_inds[-1]+1)[1:-1]
         widths[where_fixed_inds[-1]+1:] = widths[where_fixed_inds[-1]]*weights + min_width*(1-weights)
@@ -495,11 +495,14 @@ def getWidths(num, max_width=250, min_width=12, sampling_dist=100):
 def getInterpolatedCoords(coords, num=3000,
                           length_bp=45000000, segment_width_nm=20):
     '''
+    Given a low resolution representation of a chromatin segment, returns a higher resolution representation of it.
+    'num' and 'length_bp' define how high the resolution will be.
+
     Arguments:
-        *coords*: np array in which each row is the set of coordinates of a point.
+        coords: np array in which each row is the set of coordinates of a point.
         Represents the points to interpolate
-        *num*: number of points you want to obtain
-        *length_bp*: wanted length of the final segment
+        num: number of points you want to have in the final representation of the segment
+        length_bp: length that the segment is assumed to have
 
     '''
 
@@ -523,17 +526,12 @@ def getInterpolatedCoords(coords, num=3000,
 
     columns = ['x','y','z','bp'] if numdims == 3 else ['x','y','bp']
     return pd.DataFrame(np.concatenate((interp_coords_nm_with_shift, interp_coords_bp.reshape((-1,1))), axis=1), columns=columns)
-'''
-def getOpenSimplexNoiseSingle(cube_side, point, scales=[1], amplitudes=[1], seed=0):
-    opensimplex.seed(seed)
-    val = 0.0
-    x,y,z = point
-    for scale, amp in zip(scales, amplitudes):
-        val += opensimplex.noise3((x/cube_side)*scale, (y/cube_side)*scale, (z/cube_side)*scale)*amp
-    return (val+sum(amplitudes))/(2*sum(amplitudes)) # normalization'''
 
 
 def getOpenSimplexNoiseArray(cube_side=30, coords=None, scales=[1], amplitudes=[1], seed=0):
+    '''
+    Evaluate a simplex noise landscape at 'coords' coordinates, and normalize it.
+    '''
     opensimplex.seed(seed)
     if(coords is None):
         coords = np.stack(np.where(np.zeros(shape=[cube_side]*3) == 0), axis=0).T
@@ -551,20 +549,21 @@ def probToRange(x,rangemax=6):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def getUniformRandomPointsInCube(numFalseDetections, fieldLimit, scales=[1], amplitudes=[1], seed=0):
-    numDimensions=3
-    rand_locs = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
-    return rand_locs
-
 def getRandomPointsInCube(numFalseDetections, fieldLimit, scales=[1], amplitudes=[1], seed=0, smoothness=6):
+    '''
+    Get randomly positioned points in the cube defined by 'fieldLimit'.
+    This uses simplex noise to have noise not uniformly distributed.
+    '''
     numDimensions=3
-    rand_locs = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
-
     cube_side = (fieldLimit[1]-fieldLimit[0]).max()
 
+    # compute the required number of samples needed to obtain about 'numFalseDetections' localizations
+    rand_locs = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
     noise_at_rand_points = getOpenSimplexNoiseArray(cube_side, rand_locs, scales=scales, amplitudes=amplitudes, seed=seed)
     acceptance_probab = noise_at_rand_points.mean()
     num_trials = int(numFalseDetections/acceptance_probab)
+
+
     possible_false_detections = np.random.uniform(fieldLimit[0], fieldLimit[1], (num_trials,numDimensions))
     noise_at_possible_detections = getOpenSimplexNoiseArray(cube_side, possible_false_detections, scales=scales, amplitudes=amplitudes, seed=seed)
 
@@ -572,46 +571,6 @@ def getRandomPointsInCube(numFalseDetections, fieldLimit, scales=[1], amplitudes
     random_vals = np.random.uniform(0,1, len(noise_at_possible_detections))
     accepted_false_detections = possible_false_detections[random_vals<noise_at_possible_detections,:]
     return accepted_false_detections
-
-
-def getCavesInCube(numFalseDetections, fieldLimit, scales=[1], amplitudes=[1], seed=0, threshold=0.5):
-    numDimensions=3
-    cube_side = (fieldLimit[1]-fieldLimit[0]).max()
-    possible_false_detections = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
-    noise_at_possible_detections = getOpenSimplexNoiseArray(cube_side, possible_false_detections, scales=scales, amplitudes=amplitudes, seed=seed)
-    accepted_false_detections = possible_false_detections[threshold<noise_at_possible_detections,:]
-    return accepted_false_detections
-
-def extractRandomSegmentCombinationsFromChromosomes(chromosomes, segment_length_bp,
-                                    num_combinations, num_portions_per_combination,
-                                    gyr_low_percentile=0, gyr_high_percentile=1):
-    expected_segs_num = 5000 # don't take all the segments in consideration, just this number
-
-    # Count segments per chromosome and define indices for them
-    indices = []
-    segs_num = {}
-    for copy_id in range(len(chromosomes)):
-        copy_df = chromosomes[copy_id]
-        segs_num[copy_id] = int(np.ceil(chromosomes[copy_id]['bp'].max()/segment_length_bp))
-    tot_num = np.array(list(segs_num.values())).sum()
-
-    for copy_id in tqdm(range(len(chromosomes))):
-        randvec = np.random.uniform(0,1,segs_num[copy_id])
-        for seg_id in range(segs_num[copy_id]):
-            if(randvec[seg_id] > (expected_segs_num/tot_num)): continue
-            indices.append((copy_id, seg_id))
-    
-    segments_features_dicts = []
-
-    for copy_id,seg_id in tqdm(indices):
-        copy_df = chromosomes[copy_id]
-        segs_num = int(np.ceil(chromosomes[copy_id]['bp'].max()/segment_length_bp))
-        where_in_range = (copy_df['bp']>= seg_id*segment_length_bp) * \
-                copy_df['bp'] < (seg_id+1)*segment_length_bp
-        where_in_range = where_in_range.astype('bool')
-        selected_seg_df = copy_df[where_in_range].copy()
-        segments_features_dicts.append(getClusterFeatures(selected_seg_df[['x','y','z']].values, selected_features=['num','gyr']))
-    segments_features_df = pd.DataFrame(segments_features_dicts, index=indices)
 
 
 def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
@@ -627,12 +586,15 @@ def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
                                       seed = 0,
                                       verbose=0):
     '''
+
     Arguments:
         *chrs*: list of DataFrames each of which has x,y,z and bp columns.
         *approx_extracted_segments*: the number of segment to consider among all the possible ones.
             This is useful to limit the computations in case of a very large amount of possible segments.
+    
+            
     Return:
-        a list of DataFrames with columns x,y,z,bp,cluster. Each df repreents a set of segments.
+        a list of DataFrames with columns x,y,z,bp,cluster. Each df represents a set of segments.
     '''
 
     portions_indices = []
@@ -799,30 +761,3 @@ def applyGravitySteps(coords, which_fixed_coords=None, iters_num=10, shift_amoun
     for i in tqdm(range(1,iters_num+1), disable=not verbose):
         shifted_coords[i] = applyGravityStep(shifted_coords[i-1], which_fixed_coords, shift_amount=shift_amount, radius=radius, min_dist=min_dist)
     return shifted_coords if return_iterations else shifted_coords[-1]
-
-
-def steepNormal(x, m=0, radius=10, smoothness=20):
-    scale = np.sqrt(((radius**(2*2))*4)/(-8*np.log(1/2)))
-    from scipy.stats import multivariate_normal
-    mean = np.array([m]*x.shape[-1])
-    if(type(radius) != type(np.array([0]))):
-        cov = np.diag(np.array([scale]*x.shape[-1]))
-    else:
-        cov = np.diag(scale)
-    rv = multivariate_normal(mean=mean, cov=cov)
-    max_val = rv.pdf(mean)
-    return sigmoid(probToRange(rv.pdf(x)/max_val, rangemax=smoothness))
-
-def sampleSteepNormal(m=0,radius=10,smoothness=20, shape=(10,3)):
-    mean_arr = np.array([m]*shape[-1]) if (type(m) != type(np.array([0]))) else m
-    radius_arr = np.array([radius]*shape[-1])*2 if (type(radius) != type(np.array([0]))) else radius
-    limit0 = mean_arr - radius_arr*2
-    limit1 = mean_arr + radius_arr*2
-    trial_shape = list(shape)
-    trial_shape[0] = trial_shape[0]*2
-    trial_shape = tuple(trial_shape)
-    coords = np.random.uniform(limit0, limit1, trial_shape)
-    uniforms = np.random.uniform(0,1,len(coords))
-    func_vals = steepNormal(coords, m, radius, smoothness)
-    accepted_coords = coords[uniforms<func_vals]
-    return accepted_coords[:shape[0]]
