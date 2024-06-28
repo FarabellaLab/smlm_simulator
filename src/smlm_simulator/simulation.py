@@ -14,14 +14,20 @@ from smlm_simulator.various import *
 
 def getChr21DLs():
     '''
+    Gives a set of low resolution ball-and-stick representations of real chromosomes 21,
+    which you can use as starting points for simulations.
+
+
     Returns:
     * a list of Nx3 numpy array representing diffraction limited coordinates of the segments
     * a list of floats representing lengths of the segments in terms of basepairs
     '''
     if(os.path.isfile('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv')):
         df = pd.read_csv('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
-    if(os.path.isfile('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv')):
+    elif(os.path.isfile('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv')):
         df = pd.read_csv('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
+    else:
+        df = pd.read_csv('https://zenodo.org/records/3928890/files/chromosome21.tsv?download=1', sep='\t')
     is_row_null = df[['X(nm)', 'Y(nm)', 'Z(nm)']].isnull().any(axis=1)
     df2 = pd.DataFrame(is_row_null)
     df2['Chromosome copy number'] = df['Chromosome copy number']
@@ -103,13 +109,43 @@ def simulate(dl_list, lengths,
     verbose=0):
     '''
     Arguments:
-    * dl_list: list of np arrays of shape (n,3)
-    * lengths: lengths in bp of the dls
+    * dl_list: list, list of np arrays of shape (n,3)
+    * lengths: list, lengths in bp of the dls
     * ...parameters
+    * probes_per_mb: int, how many probes to position in 1megabase of chromatin
+    * segment_width_nm: float, how thick should chromatin be
+    * segment_length_nm: int, length in basepairs (error in the variable name) should be the segment you generate
+    * segments_per_sim: int, how many segments to insert in a single experiment
+    * segs_per_comb_is_random: bool, should the number of segments be chosen randomly or should it be exaclty 'segments_per_sim'
+    * selection_procedure: ['random', 'sparse_percentile'], whether to select the segments randomly or making sure that the entire distribution of radii of gyration is represented
+    * num_simulations: int, how many experiments to generate
+    * max_shift_amount_nm: float, distance between segments. Has a different meaning depending on 'arrangement'
+    * arrangement: ['lattice', 'tetrahedron', 'random'], how to arrange segments in the field of view.
+        If lattice the centers of mass of the segments are positioned on a lattice in which successice elements along an axis are spaced 'max_shift_amount_nm' nm apart.
+        If tetrahedron the CoMs of the segments are positioned on a tetrahedron and are all 'max_shift_amount_nm' nms apart.
+        If random they are randomly positioned in the field of view, with the constraint that mean nearest neighbor CoM distance is not more than 50nm from 'max_shift_amount_nm'/
+    * random_seed: int, random seed for reproducibility of the the simulation
+    * fov_size: np.array of shape (3,), size of the field of view along x,y,z axes in nm
+    * labels_per_probe: int, how many labels (those which emit blinks) should on average be assigned to a probe
+    * precision_mean: float, the mean precision (nm) of localizations
+    * precision_sd: float, the standard deviation (nm) of the precision of localizations
+    * bleaching_prob: float in range 0.0-1.0, bleaching probability. the probability of each blink of being the last one for that label
+    * unbound_probes_per_bound: float, how many unbound probes are positioned in 1 cubic megabase of FoV (misleading variable name)
+    * is_unbound_rate_random: bool, is unbound rate random (normal distribution with mean 'unbound_probes_per_bound' and std 52) or is it fixed to 'unbound_probes_per_bound'
+    * attraction_towards_bound: bool, are unbound probes attracted also to bound ones, or just to other unbound probes
+    * attraction_iterations: int, how many iterations of attraction computation should be performed
+    * attraction_radius_nm: float, maximum distance of two probes to be subject to mutual attraction
+    * probe_width_nm: float, distance below which two probes are not subject to mutual attraction
+    * attraction_factor: float, amount of attraction between probes
+    * random_noise_per_blinks: float, how many false localizations probes are positioned in 1 cubic megabase of FoV (misleading variable name)
+    * detection_rate: unused, the detection rate is actually always 100%
+
     
 
     Returns:
     * list of pandas dataframes representing simulated experiments
+        each df with have columns
+        - 
 
     '''
 
@@ -349,8 +385,6 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
     num_total_blinks = len(detectionCoords)
 
     if(verbose>0): print('removing undetected blinks')
-    # detectionIndicesKeep = np.random.choice(np.arange(num_total_blinks), int(detectionRate*num_total_blinks), replace = False)
-    # detectionCoords = detectionCoords.loc[detectionIndicesKeep,:]
 
     if(verbose>0): print('removing detections outside fov')
     is_detection_inside = ((detectionCoords[['x','y','z']].values > fieldLimit[0])*(detectionCoords[['x','y','z']].values < fieldLimit[1])).prod(axis=1).astype('bool')
@@ -372,10 +406,7 @@ def simulateSTORMAdvanced(moleculeCoords, averageLabelsPerMol, blinkGeomProb,
         numFalseDetections = int(sampledFalseDetectionRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9) # int(falseDetectionRate*len(detectionCoords))'''
         numFalseDetections = int(falseDetectionRate*(fieldLimit[1]-fieldLimit[0]).prod()*1e-9)
     if(numFalseDetections > 0):
-        # noise is based on open simplex algorithm, meaning that it is'nt simply uniform
-        # accepted_false_detections = getRandomPointsInCube(numFalseDetections, fieldLimit, scales=noisescales, amplitudes=noiseamplitudes, smoothness=noisesmoothness, seed=randseed)
         accepted_false_detections = np.random.uniform(fieldLimit[0], fieldLimit[1], (numFalseDetections,numDimensions))
-        # accepted_false_detections = np.random.normal(fieldLimit.sum(axis=0), (fieldLimit[1]-fieldLimit[0])/4, (numFalseDetections,numDimensions))
         accepted_false_detections_df = pd.DataFrame(accepted_false_detections,
             columns = ['x','y','z'])
         accepted_false_detections_df['moleculeIndex'] = -1
@@ -502,7 +533,6 @@ def getOpenSimplexNoiseSingle(cube_side, point, scales=[1], amplitudes=[1], seed
     return (val+sum(amplitudes))/(2*sum(amplitudes)) # normalization'''
 
 
-# @jit(cache=True, parallel=True)
 def getOpenSimplexNoiseArray(cube_side=30, coords=None, scales=[1], amplitudes=[1], seed=0):
     opensimplex.seed(seed)
     if(coords is None):
@@ -653,45 +683,16 @@ def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
     combs_definitions = []
     for comb_id in range(num_combinations):
         if(selection_procedure=='random'):
+            # randomly select segments among all the ones available
             comb_def = np.random.choice(selected_df.index, num_segs_per_comb[comb_id], replace=False)
         if(selection_procedure=='sparse_percentile'):
+            # randomly select segments in such a way that they have sparse radii of gyration.
+            # Do this by dividing the feature space in quantile regions and picking one segment per each region.
             comb_def = getRandomIntsAtPercentileRegions(selected_df.index.to_list(), selected_df['gyr'].values, num_segs_per_comb[comb_id])
         combs_definitions.append(comb_def)
     
     combs_dfs = []
     full_defs = []
-    '''for comb_def in combs_definitions:
-        full_def = []
-        shifts = np.random.uniform(-1.,1., (len(comb_def),3))
-        if(len(comb_def)>0): shifts = shifts/np.linalg.norm(shifts, axis=1)
-        shift_amounts = np.random.uniform(0,max_shift_amount, (len(comb_def))) if len(comb_def)>1 else np.array([0])
-        current_comb_dfs = []
-        seg_count = -1
-        for copy_id, seg_id in comb_def:
-            seg_count+=1
-            defin = {}
-            defin['copy'] = copy_id
-            defin['portion'] = seg_id
-            full_def.append(defin)
-            copy_df = chrs[copy_id]
-            where_in_range = (copy_df['bp']>= seg_id*segment_length_bp) * (copy_df['bp'] < (seg_id+1)*segment_length_bp)
-            where_in_range = where_in_range.astype('bool')
-            selected_seg_df = copy_df.loc[where_in_range,:].copy()
-            selected_seg_df['cluster-ID'] = seg_count
-            current_comb_dfs.append(selected_seg_df)
-        if(len(current_comb_dfs)>0):
-            current_comb_joint_df = pd.concat(current_comb_dfs, axis=0).reset_index(drop=True)
-            center = current_comb_joint_df[['x','y','z']].median(axis=0)
-            # Shifting clusters away from the center
-            for i in np.unique(current_comb_joint_df['cluster-ID']):
-                clus_center = getCoM(current_comb_joint_df.loc[current_comb_joint_df['cluster-ID'] == i,['x','y','z']].values)
-                total_shift = (center-clus_center) + (shifts[i]*shift_amounts[i])
-                current_comb_joint_df.loc[current_comb_joint_df['cluster-ID'] == i,['x','y','z']] += total_shift
-                full_def[i]['shift'] = np.array(total_shift)
-        else:
-            current_comb_joint_df = pd.DataFrame(columns=['x','y','z','cluster-ID'])
-        combs_dfs.append(current_comb_joint_df)
-        full_defs.append(full_def)'''
     for comb_def in combs_definitions:
         print('len(comb_def): ', len(comb_def))
         full_def = []
@@ -714,11 +715,6 @@ def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
                 [1,1,0]
                 ]).T*1/np.sqrt(2)*max_shift_amount
         elif(arrangement == 'random'):
-            # required_dens = (1/(70*max_shift_amount))**2
-            # required_space = len(comb_def)/required_dens
-            # box_side = np.round(np.cbrt(required_space), 0)
-            # box_side = getBoxSideGivenNumAndNNDist(len(comb_def), max_shift_amount)
-            # segments_locations = np.random.uniform(np.array([0]*3), np.array([box_side]*3), (len(comb_def),3)).T
             segments_locations = getPositionsGivenNumAndNNDist(len(comb_def), max_shift_amount).T
         else:
             raise ValueError('Invalid arrangement name')
@@ -782,15 +778,7 @@ def applyGravityStep(coords, which_fixed_coords, shift_amount=1/2, radius=100, m
             # compute the normalized directions of attraction
             shift_dirs = (neigh_coords - coords[i])/d.reshape(-1,1)
             # magnitude of attraction is inversely proportional to distance squared
-            # magnitudes = 1/d**2
             magnitudes = -4*((min_dist/d)**12 - (min_dist/d)**6) # lennard jones
-            # max_mag = -4*(-12*(min_dist**12/d**13) - -6*(min_dist**6/d**7))
-            # x_at_max = (8**(1/6))*min_dist
-            # max_mag = -4*((min_dist/x_at_max)**12 - (min_dist/x_at_max)**6)
-            # magnitudes[magnitudes<-max_mag] = -max_mag
-            # if(i==0): print('dist: ', + d)
-            # if(i==0): print('magnitudes: ', + magnitudes)
-            # if(i==0): print('norm magnitudes: ', + magnitudes/shift_amount)
             # attraction from molecules inside the thickness is 0
             magnitudes[d<min_dist] = 0
             # shift applied to molecules is the sum of individual shifts
@@ -799,7 +787,6 @@ def applyGravityStep(coords, which_fixed_coords, shift_amount=1/2, radius=100, m
         else:
             # if the molecule is fixed it's shift is zero
             shift_vecs[i] = np.zeros(coords.shape[-1])
-    # print('total shift: ', (shift_vecs*shift_amount).sum())
     shifted_coords = coords + shift_vecs*shift_amount
     return shifted_coords
 
@@ -810,14 +797,11 @@ def applyGravitySteps(coords, which_fixed_coords=None, iters_num=10, shift_amoun
     # shifted_coords = coords.copy()
     shifted_coords[0] = coords.copy()
     for i in tqdm(range(1,iters_num+1), disable=not verbose):
-        # print('pre: ', shifted_coords[0])
         shifted_coords[i] = applyGravityStep(shifted_coords[i-1], which_fixed_coords, shift_amount=shift_amount, radius=radius, min_dist=min_dist)
-        # print('post: ', shifted_coords[0])
     return shifted_coords if return_iterations else shifted_coords[-1]
 
 
 def steepNormal(x, m=0, radius=10, smoothness=20):
-    dims= x.shape[-1]
     scale = np.sqrt(((radius**(2*2))*4)/(-8*np.log(1/2)))
     from scipy.stats import multivariate_normal
     mean = np.array([m]*x.shape[-1])
