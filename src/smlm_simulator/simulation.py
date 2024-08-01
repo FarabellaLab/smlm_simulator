@@ -12,7 +12,7 @@ from smlm_simulator.various import *
 
 # from numba import jit
 
-def getChr21DLs():
+def getChr21DLs(min_seg_length=1000000):
     '''
     Gives a set of low resolution ball-and-stick representations of real chromosomes 21,
     which you can use as starting points for simulations.
@@ -23,47 +23,50 @@ def getChr21DLs():
     * a list of floats representing lengths of the segments in terms of basepairs
     '''
     if(os.path.isfile('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv')):
-        df = pd.read_csv('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
+        df0 = pd.read_csv('/home/ipiacere@iit.local/Desktop/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
     elif(os.path.isfile('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv')):
-        df = pd.read_csv('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
+        df0 = pd.read_csv('/work/ipiacere/data/from_Irene/ball_and_stick/chromosome21.tsv', sep='\t')
     else:
-        df = pd.read_csv('https://zenodo.org/records/3928890/files/chromosome21.tsv?download=1', sep='\t')
-    is_row_null = df[['X(nm)', 'Y(nm)', 'Z(nm)']].isnull().any(axis=1)
+        df0 = pd.read_csv('https://zenodo.org/records/3928890/files/chromosome21.tsv?download=1', sep='\t')
+    df = df0[['X(nm)', 'Y(nm)', 'Z(nm)','Genomic coordinate','Chromosome copy number']] \
+        .rename({
+            'X(nm)': 'x',
+            'Y(nm)': 'y',
+            'Z(nm)': 'z',
+            'Genomic coordinate':'gen_coord',
+            'Chromosome copy number': 'chr_copy_num'},
+        axis=1)
+    
+    # identify chr copies without missing x,y,z values
+    is_row_null = df[['x','y','z']].isnull().any(axis=1)
     df2 = pd.DataFrame(is_row_null)
-    df2['Chromosome copy number'] = df['Chromosome copy number']
-    null_counts = df2.groupby(['Chromosome copy number']).sum()
-
+    df2['chr_copy_num'] = df['chr_copy_num']
+    null_counts = df2.groupby(['chr_copy_num']).sum()
     good_copies = np.array(null_counts.index[(null_counts==0).values.flatten()])
-    good_copies = [g for g in good_copies if g not in [3250]]
+    # good_copies = [g for g in good_copies if g not in [3250]]
 
-
+    # parse genetic start, end and center
     df_cleaned = df.copy()
-    df_cleaned['genetic_start'] = df_cleaned['Genomic coordinate'].apply(lambda x: int(x.split(':')[1].split('-')[0]))
-    df_cleaned['genetic_end'] = df_cleaned['Genomic coordinate'].apply(lambda x: int(x.split('-')[1]))
+    df_cleaned['genetic_start'] = df_cleaned['gen_coord'].apply(lambda x: int(x.split(':')[1].split('-')[0]))
+    df_cleaned['genetic_end'] = df_cleaned['gen_coord'].apply(lambda x: int(x.split('-')[1]))
     df_cleaned['genetic_center'] = ((df_cleaned['genetic_start'] + df_cleaned['genetic_end'])/2).astype('int')
+    df_cleaned = df_cleaned.sort_values('genetic_start', kind='stable')
 
-
-    diffs_bp_all = []
-    diffs_nm_all = []
-    good_copies_with_small_dists = []
-    for i in good_copies:
-        diffs_bp = df_cleaned[df_cleaned['Chromosome copy number'] == i]['genetic_start'].diff()[1:].values
-        diffs_nm = np.linalg.norm(df_cleaned[df_cleaned['Chromosome copy number'] == i][['X(nm)','Y(nm)','Z(nm)']].diff()[1:], axis=1)
-        diffs_bp_all.append(diffs_bp)
-        diffs_nm_all.append(diffs_nm)
-        if(np.any(diffs_bp!=50000)):
-            good_copies_with_small_dists.append(i)
-
-    diffs_bp_all = np.concatenate(diffs_bp_all, axis=0)
-    diffs_nm_all = np.concatenate(diffs_nm_all, axis=0)
-
+    # collect positions and lengths
+    # avoid sections with resolution larger than 50000bp
     dls = []
     lengths = []
-    for gid in good_copies_with_small_dists:
-        df_dl = df_cleaned[df_cleaned['Chromosome copy number'] == gid]
-        length = df_dl['genetic_end'].max() - df_dl['genetic_end'].min()
-        dls.append(df_dl[['X(nm)', 'Y(nm)', 'Z(nm)']].values)
-        lengths.append(length)
+    for i in good_copies:
+        chrcopy_subdf = df_cleaned[df_cleaned['chr_copy_num'] == i].copy()
+        diffs_bp = chrcopy_subdf['genetic_start'].diff().values
+        split_inds = np.where(diffs_bp!=50000)[0][1:]
+        subdfs = [chrcopy_subdf.iloc[split_inds[i]:split_inds[i+1],:].copy() for i in range(len(split_inds)-1)]
+        for df1 in subdfs:
+            length = df1['genetic_end'].max() - df1['genetic_end'].min()
+            if(len(df1)<=1 or length<min_seg_length):
+                continue
+            dls.append(df1[['x','y','z']].values)
+            lengths.append(length)
     return dls, lengths
 
 def getRandomIntsAtPercentileRegions(inds, values, num):
