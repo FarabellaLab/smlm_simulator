@@ -75,12 +75,12 @@ def doSingle(dls1, lengths1, outdir, probes_params, combination_params, localiza
 pool = mp.Pool(16)
 jobs = {}
 
-for seg_len_bp in [1000000,500000]:
+for seg_len_bp in [1000000,500000][:1]:
     print('seg_len_bp: ', seg_len_bp)
     single_combination_parameters['segment_length_nm'] = seg_len_bp
 
     # varying distance
-    for dist in [100,500,1000,2000,3000]:
+    for dist in [100,500,1000,2000,3000][:1]:
         print('dist: ', dist)
         single_combination_parameters['max_shift_amount_nm'] = dist
         single_combination_parameters['arrangement'] = 'lattice'
@@ -91,7 +91,7 @@ for seg_len_bp in [1000000,500000]:
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_distance/distance_%inm'%(seg_len_bp, dist)
         jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
     
-    # varying noise
+    '''# varying noise
     for noise_level in [0.25,0.5,1.0,1.5]:
         print('noise_level: ', noise_level)
         single_combination_parameters['max_shift_amount_nm'] = 1000
@@ -113,7 +113,7 @@ for seg_len_bp in [1000000,500000]:
         single_combination_parameters['segments_per_sim'] = num
 
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_num/num_%i'%(seg_len_bp, num)
-        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
+        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))'''
 
 
 ress = {}
