@@ -54,7 +54,8 @@ localization_parameters={
         'detection_rate': 1
     }
 
-output_dir = '/home/ipiacere@iit.local/Desktop/data/synth_data/scenarios2'
+# output_dir = '/home/ipiacere@iit.local/Desktop/data/synth_data/scenarios2'
+output_dir = '/work/ipiacere/data/synth_data/scenarios2'
 
 dls, lengths = getChr21DLs()
 
