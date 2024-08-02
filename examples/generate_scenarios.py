@@ -64,12 +64,24 @@ single_probes_parameters = probes_parameters.copy()
 single_localization_parameters = localization_parameters.copy()
 single_combination_parameters = combination_parameters.copy()
 
+def doSingle(dls1, lengths1, outdir, probes_params, combination_params, localization_params):
+    sims_dfs = simulate(dls1, lengths1, verbose=0,
+                                    probes_parameters=probes_params,
+                                    combination_parameters=combination_params,
+                                    localization_parameters=localization_params)
+    pars_dict = {**probes_params, **combination_params, **localization_params}
+    saveSimulatedPointClouds(sims_dfs, destination_folder=outdir, parameters_dict=pars_dict)
+
+pool = mp.Pool(16)
+jobs = {}
 
 for seg_len_bp in [1000000,500000]:
+    print('seg_len_bp: ', seg_len_bp)
     single_combination_parameters['segment_length_nm'] = seg_len_bp
 
     # varying distance
     for dist in [100,500,1000,2000,3000]:
+        print('dist: ', dist)
         single_combination_parameters['max_shift_amount_nm'] = dist
         single_combination_parameters['arrangement'] = 'lattice'
         single_localization_parameters['unbound_probes_per_bound'] = localization_parameters['unbound_probes_per_bound']*1.0
@@ -77,15 +89,11 @@ for seg_len_bp in [1000000,500000]:
         single_combination_parameters['segments_per_sim'] = 2
 
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_distance/distance_%inm'%(seg_len_bp, dist)
-        sims_dfs = simulate(dls, lengths, verbose=0,
-                                        probes_parameters=probes_parameters,
-                                        combination_parameters=combination_parameters,
-                                        localization_parameters=localization_parameters)
-        pars_dict = {**probes_parameters, **combination_parameters, **localization_parameters}
-        saveSimulatedPointClouds(sims_dfs, destination_folder=output_dir2, parameters_dict=pars_dict)
+        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
     
     # varying noise
     for noise_level in [0.25,0.5,1.0,1.5]:
+        print('noise_level: ', noise_level)
         single_combination_parameters['max_shift_amount_nm'] = 1000
         single_combination_parameters['arrangement'] = 'lattice'
         single_localization_parameters['unbound_probes_per_bound'] = localization_parameters['unbound_probes_per_bound']*noise_level
@@ -93,15 +101,11 @@ for seg_len_bp in [1000000,500000]:
         single_combination_parameters['segments_per_sim'] = 2
 
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_noise/noise_level_%.2f'%(seg_len_bp, noise_level)
-        sims_dfs = simulate(dls, lengths, verbose=0,
-                                        probes_parameters=probes_parameters,
-                                        combination_parameters=combination_parameters,
-                                        localization_parameters=localization_parameters)
-        pars_dict = {**probes_parameters, **combination_parameters, **localization_parameters}
-        saveSimulatedPointClouds(sims_dfs, destination_folder=output_dir2, parameters_dict=pars_dict)
+        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
     
     # varying num
     for num in [2,3,5,10,15,20,40,80]:
+        print('num: ', num)
         single_combination_parameters['max_shift_amount_nm'] = 1000
         single_combination_parameters['arrangement'] = 'random'
         single_localization_parameters['unbound_probes_per_bound'] = localization_parameters['unbound_probes_per_bound']*1.0
@@ -109,12 +113,16 @@ for seg_len_bp in [1000000,500000]:
         single_combination_parameters['segments_per_sim'] = num
 
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_num/num_%i'%(seg_len_bp, num)
-        sims_dfs = simulate(dls, lengths, verbose=0,
-                                        probes_parameters=probes_parameters,
-                                        combination_parameters=combination_parameters,
-                                        localization_parameters=localization_parameters)
-        pars_dict = {**probes_parameters, **combination_parameters, **localization_parameters}
-        saveSimulatedPointClouds(sims_dfs, destination_folder=output_dir2, parameters_dict=pars_dict)
+        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
+
+
+ress = {}
+for k,v in jobs.items():
+    res1 = v.get()
+    ress[k] = res1
+    print(k)
+    print(res1)
+    print('-----')
 
 
 

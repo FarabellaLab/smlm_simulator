@@ -665,7 +665,7 @@ def getChromosomeSegmentsCombinations(chrs, segment_length_bp=1000000,
     combs_dfs = []
     full_defs = []
     for comb_def in combs_definitions:
-        print('len(comb_def): ', len(comb_def))
+        if(verbose>1): print('len(comb_def): ', len(comb_def))
         full_def = []
         if(arrangement == 'lattice'):
             x_poss_count = y_poss_count = z_poss_count = int(np.ceil(np.cbrt(len(comb_def))))
