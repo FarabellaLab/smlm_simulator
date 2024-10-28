@@ -124,7 +124,7 @@ def simulate(dl_list, lengths,
     * ...parameters
     * probes_per_mb: int, how many probes to position in 1megabase of chromatin
     * segment_width_nm: unused, is is actually variable along the segment and is automatically computed with another function (getWidths)
-    * segment_length_nm: int, length in basepairs (error in the variable name) should be the segment you generate
+    * segment_length_nm: int, length in basepairs (error in the variable name) of the segment you generate
     * segments_per_sim: int, how many segments to insert in a single experiment
     * segs_per_comb_is_random: bool, should the number of segments be chosen randomly or should it be exaclty 'segments_per_sim'
     * selection_procedure: ['random', 'sparse_percentile'], whether to select the segments randomly or making sure that the entire distribution of radii of gyration is represented

@@ -1,7 +1,7 @@
 
 # Intro
 # 
-# Generate a single set of simulated experiments and save them
+# Generate a dataset containing the 4 scenarios that we use for assessment of clustering algorithms
 
 
 
@@ -11,19 +11,16 @@ import os
 import numpy as np
 from smlm_simulator.various import *
 from smlm_simulator.simulation import *
-# from pipeline.utils.simulation import *
 import multiprocessing as mp
-# from CIMA.TEMPy.ScoringFunctions import ScoringFunctions
-# from CIMA.segments.SegmentGaussian import TransformBlurrer
-# from CIMA.utils.WritePDB import *
-# from CIMA.utils.Visualization import *
 import sys
 
 import warnings
 warnings.filterwarnings("ignore")
 
+# Overwrite stdout and stderr functions so that each line in the ouput starts with a string representing the current time. It's just for easier debugging.
 overwriteOuts()
 
+# Specify all the parameters. You will change some of them as needed for each of scenarios.
 probes_parameters={
         'probes_per_mb': 5000*0.75, # <5000 # efficiency 25,50,75,100
         'segment_width_nm': 500 # fixed for biological reasons (computed from the average folding ratio of chromatin (diameter=0.01*genomic_length))
@@ -55,16 +52,23 @@ localization_parameters={
     }
 
 # output_dir = '/home/ipiacere@iit.local/Desktop/data/synth_data/scenarios2'
-output_dir = '/work/ipiacere/data/synth_data/scenarios2'
+# output_dir = '/work/ipiacere/data/synth_data/scenarios2'
+output_dir = '/home/ipiacere@iit.local/synth1'
 
+if(not os.access(output_dir, os.W_OK)):
+    raise ValueError('Can\'t write in the specified folder: ' + output_dir)
+
+
+# Get low-resolution traces of real chromosomes 
 dls, lengths = getChr21DLs()
 
 
-
+# Copy the generic parameters defined before.
 single_probes_parameters = probes_parameters.copy()
 single_localization_parameters = localization_parameters.copy()
 single_combination_parameters = combination_parameters.copy()
 
+# This function is used to generate a set of simulated experiments and saving them in the specified folder.
 def doSingle(dls1, lengths1, outdir, probes_params, combination_params, localization_params):
     sims_dfs = simulate(dls1, lengths1, verbose=1,
                                     probes_parameters=probes_params,
@@ -76,6 +80,7 @@ def doSingle(dls1, lengths1, outdir, probes_params, combination_params, localiza
 pool = mp.Pool(16)
 jobs = {}
 
+# Varying the length (in basepairs) of the segments
 for seg_len_bp in [1000000,500000][:1]:
     print('seg_len_bp: ', seg_len_bp)
     single_combination_parameters['segment_length_nm'] = seg_len_bp
@@ -92,7 +97,7 @@ for seg_len_bp in [1000000,500000][:1]:
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_distance/distance_%inm'%(seg_len_bp, dist)
         jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
     
-    '''# varying noise
+    # varying noise
     for noise_level in [0.25,0.5,1.0,1.5]:
         print('noise_level: ', noise_level)
         single_combination_parameters['max_shift_amount_nm'] = 1000
@@ -114,7 +119,7 @@ for seg_len_bp in [1000000,500000][:1]:
         single_combination_parameters['segments_per_sim'] = num
 
         output_dir2 = output_dir + '/seg_len_bp_%i/varying_num/num_%i'%(seg_len_bp, num)
-        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))'''
+        jobs[output_dir2] = pool.apply_async(doSingle, (dls, lengths, output_dir2, single_probes_parameters, single_combination_parameters, single_localization_parameters))
 
 
 ress = {}
