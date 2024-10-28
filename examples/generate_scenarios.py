@@ -66,7 +66,7 @@ single_localization_parameters = localization_parameters.copy()
 single_combination_parameters = combination_parameters.copy()
 
 def doSingle(dls1, lengths1, outdir, probes_params, combination_params, localization_params):
-    sims_dfs = simulate(dls1, lengths1, verbose=0,
+    sims_dfs = simulate(dls1, lengths1, verbose=1,
                                     probes_parameters=probes_params,
                                     combination_parameters=combination_params,
                                     localization_parameters=localization_params)
